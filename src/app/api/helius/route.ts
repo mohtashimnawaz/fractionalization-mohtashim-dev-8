@@ -28,6 +28,20 @@ export async function POST(req: NextRequest) {
 	}
 }
 
-export async function GET() {
-	return new Response(JSON.stringify({ status: 'helius proxy endpoint' }), { status: 200, headers: { 'content-type': 'application/json' } });
+export async function GET(req: Request) {
+	try {
+		const url = new URL(req.url);
+		const owner = url.searchParams.get('owner');
+
+		if (!owner) {
+			return new Response(JSON.stringify({ error: 'Missing owner query parameter' }), { status: 400, headers: { 'content-type': 'application/json' } });
+		}
+
+		const { getAssetsByOwner } = await import('@/lib/helius');
+		const assets = await getAssetsByOwner(owner);
+		return new Response(JSON.stringify({ assets }), { status: 200, headers: { 'content-type': 'application/json' } });
+	} catch (err: any) {
+		console.error('/api/helius GET error:', err);
+		return new Response(JSON.stringify({ error: err.message || String(err) }), { status: 500, headers: { 'content-type': 'application/json' } });
+	}
 }

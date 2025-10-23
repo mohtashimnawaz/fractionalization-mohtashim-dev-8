@@ -133,60 +133,30 @@ async function mintWithHeliusAPI(
   params: MintCNFTParams,
   walletAddress: string,
 ): Promise<{ signature: string; assetId: string }> {
-  
-  const apiKey = process.env.NEXT_PUBLIC_HELIUS_API_KEY;
-  const network = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'devnet';
-  
-  if (!apiKey) {
-    throw new Error('Helius API key not configured');
-  }
-
-  const response = await fetch(`https://${network}.helius-rpc.com/?api-key=${apiKey}`, {
+  // Call server-side endpoint which holds the Helius API key server-side (HELIUS_API_KEY)
+  const response = await fetch('/api/mint-cnft', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 'helius-mint',
-      method: 'mintCompressedNft',
-      params: {
-        name: params.name,
-        symbol: params.symbol,
-        owner: walletAddress,
-        description: params.description || `A compressed NFT: ${params.name}`,
-        attributes: [
-          {
-            trait_type: 'Type',
-            value: 'Compressed NFT',
-          },
-          {
-            trait_type: 'Created',
-            value: new Date().toISOString(),
-          },
-        ],
-        imageUrl: params.imageUrl || 'https://arweave.net/placeholder-image',
-        externalUrl: '',
-        sellerFeeBasisPoints: 500,
-      },
+      name: params.name,
+      symbol: params.symbol,
+      owner: walletAddress,
+      description: params.description,
+      imageUrl: params.imageUrl,
     }),
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Helius API error: ${response.status} - ${errorText}`);
+    const text = await response.text();
+    throw new Error(`Server mint error: ${response.status} - ${text}`);
   }
 
   const data = await response.json();
-  
   if (data.error) {
-    throw new Error(`Helius RPC error: ${data.error.message || JSON.stringify(data.error)}`);
+    throw new Error(data.error?.message || data.error || 'Unknown server mint error');
   }
 
-  return {
-    signature: data.result.signature,
-    assetId: data.result.assetId,
-  };
+  return { signature: data.signature, assetId: data.assetId };
 }
 
 export const useMintCNFT = () => {

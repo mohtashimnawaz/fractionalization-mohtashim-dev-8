@@ -3,7 +3,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { getAssetsByOwner, CompressedNFT } from '@/lib/helius';
+import type { CompressedNFT } from '@/lib/helius';
 
 /**
  * Fetch compressed NFTs owned by the connected wallet
@@ -14,8 +14,15 @@ const fetchUserCNFTs = async (
   if (!walletAddress) return [];
 
   try {
-    console.log('🔍 Fetching cNFTs for wallet:', walletAddress);
-    const assets = await getAssetsByOwner(walletAddress);
+    console.log('🔍 Fetching cNFTs for wallet via server proxy:', walletAddress);
+    const res = await fetch(`/api/helius?owner=${encodeURIComponent(walletAddress)}`);
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`Server error fetching cNFTs: ${res.status} - ${txt}`);
+    }
+
+    const json = await res.json();
+    const assets: CompressedNFT[] = json.assets || [];
     console.log(`✅ Found ${assets.length} compressed NFT(s)`);
     
     if (assets.length > 0) {

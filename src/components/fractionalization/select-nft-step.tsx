@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useUserCNFTs, useMintCNFT } from '@/hooks';
 import { useWallet } from '@/components/solana/solana-provider';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
@@ -63,6 +63,13 @@ export function SelectNFTStep() {
       refetch();
     }, 3000);
   };
+
+  // When the connected account changes, refetch the user's cNFTs
+  useEffect(() => {
+    if (account?.address) {
+      refetch();
+    }
+  }, [account?.address, refetch]);
 
   if (!account) {
     return (

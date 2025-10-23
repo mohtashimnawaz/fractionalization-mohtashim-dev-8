@@ -20,15 +20,15 @@ interface WalletAdapterProviderProps {
 export function WalletAdapterProvider({ children }: WalletAdapterProviderProps) {
   // Get Helius RPC endpoint from environment
   const endpoint = useMemo(() => {
-    const apiKey = process.env.NEXT_PUBLIC_HELIUS_API_KEY;
+    // Use a public RPC URL for client-side wallet connection.
+    // If you need a custom RPC, set NEXT_PUBLIC_SOLANA_RPC_URL in your environment (client-visible).
+    const publicRpc = process.env.NEXT_PUBLIC_SOLANA_RPC_URL;
     const network = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'devnet';
-    
-    if (apiKey) {
-      return `https://${network}.helius-rpc.com/?api-key=${apiKey}`;
-    }
-    
-    // Fallback to public devnet
-    return 'https://api.devnet.solana.com';
+
+    if (publicRpc) return publicRpc;
+
+    // Use the public Solana devnet RPC by default
+    return `https://${network}.rpcpool.com`;
   }, []);
 
   // Configure wallet adapters

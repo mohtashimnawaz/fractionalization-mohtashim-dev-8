@@ -19,17 +19,21 @@
 
 import { PublicKey } from '@solana/web3.js';
 
-// Helius API configuration
-const HELIUS_API_KEY = process.env.NEXT_PUBLIC_HELIUS_API_KEY || '';
+// Helius API configuration (server-only preferred)
+// Use a non-public env var `HELIUS_API_KEY`. For convenience in local dev we
+// allow falling back to NEXT_PUBLIC_HELIUS_API_KEY if present, but this
+// exposes the key to the client bundle and should NOT be used in production.
+const HELIUS_API_KEY = process.env.HELIUS_API_KEY || process.env.NEXT_PUBLIC_HELIUS_API_KEY || '';
 const HELIUS_RPC_URL = `https://devnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 
+if (!process.env.HELIUS_API_KEY && process.env.NEXT_PUBLIC_HELIUS_API_KEY) {
+  console.warn('⚠️ Using NEXT_PUBLIC_HELIUS_API_KEY as a fallback for HELIUS_API_KEY. This is only for local development. Do NOT use in production.');
+}
+
 if (!HELIUS_API_KEY) {
-  console.warn(
-    '⚠️ NEXT_PUBLIC_HELIUS_API_KEY not set. Please add it to .env.local'
-  );
+  console.warn('⚠️ HELIUS_API_KEY not set. Add it to .env.local (server-only) and Vercel project env.');
 } else {
-  console.log('✅ Helius API key loaded:', HELIUS_API_KEY.substring(0, 8) + '...' + HELIUS_API_KEY.substring(HELIUS_API_KEY.length - 4));
-  console.log('📡 Helius RPC URL configured');
+  console.log('✅ Helius API key loaded (server or fallback)');
 }
 
 /**
@@ -140,9 +144,7 @@ export interface CompressedNFT {
  */
 async function callDASApi<T>(method: string, params: unknown): Promise<T> {
   if (!HELIUS_API_KEY) {
-    throw new Error(
-      'Helius API key not configured. Please add NEXT_PUBLIC_HELIUS_API_KEY to .env.local'
-    );
+    throw new Error('Helius API key not configured. Please add HELIUS_API_KEY to your server environment');
   }
 
   try {
