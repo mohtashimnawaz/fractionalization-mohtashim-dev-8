@@ -25,6 +25,9 @@ interface MintCNFTParams {
   symbol: string;
   description?: string;
   imageUrl?: string;
+  // When true, force using the Helius server-side mint path even if a Merkle tree is configured.
+  // Intended for debugging/testing only.
+  forceHelius?: boolean;
 }
 
 /**
@@ -165,11 +168,14 @@ export const useMintCNFT = () => {
   const { connection } = useConnection();
   const queryClient = useQueryClient();
 
-  // Check if we should use existing tree (user-paid) or Helius API
-  const useExistingTree = !!process.env.NEXT_PUBLIC_MERKLE_TREE_ADDRESS;
+  // Environment configured Merkle tree (build-time)
+  const configuredTree = !!process.env.NEXT_PUBLIC_MERKLE_TREE_ADDRESS;
 
   return useMutation({
     mutationFn: async (params: MintCNFTParams) => {
+      // If caller forces Helius, prefer that even if a tree is configured
+      const useExistingTree = configuredTree && !params.forceHelius;
+
       if (useExistingTree) {
         // Mode 1: Use existing tree with user wallet signing
         if (!walletAdapter.publicKey) {
@@ -195,7 +201,7 @@ export const useMintCNFT = () => {
       }
     },
     onSuccess: (data) => {
-      if (useExistingTree) {
+      if (configuredTree) {
         toast.success('🎉 cNFT Minted Successfully!', {
           description: 'You signed and paid for this transaction. Note: Using mock metadata URI for testing.',
           duration: 6000,

@@ -8,7 +8,7 @@
 import { useState, useEffect } from 'react';
 import { useUserCNFTs, useMintCNFT } from '@/hooks';
 import { useWallet } from '@/components/solana/solana-provider';
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
+import { WalletDropdown } from '@/components/wallet-dropdown';
 import { useWallet as useWalletAdapter } from '@solana/wallet-adapter-react';
 import { useFractionalizationStore } from '@/stores';
 import { FractionalizationStep } from '@/types';
@@ -22,7 +22,7 @@ import { Loader2, RefreshCw, Plus } from 'lucide-react';
 import Image from 'next/image';
 
 export function SelectNFTStep() {
-  const { account } = useWallet();
+  const { account, wallets, connected, wallet } = useWallet();
   const { data: nfts, isLoading, error, refetch } = useUserCNFTs(account?.address);
   const { formData, updateFormData, setStep } = useFractionalizationStore();
   const mintCNFT = useMintCNFT();
@@ -64,12 +64,58 @@ export function SelectNFTStep() {
     }, 3000);
   };
 
+  const handleServerMint = async () => {
+    if (!mintForm.name || !mintForm.symbol) return;
+
+    // Force Helius server-side mint even if a Merkle tree is configured
+    await mintCNFT.mutateAsync({
+      name: mintForm.name,
+      symbol: mintForm.symbol,
+      description: mintForm.description || undefined,
+      imageUrl: mintForm.imageUrl || undefined,
+      forceHelius: true,
+    });
+
+    setMintForm({ name: '', symbol: '', description: '', imageUrl: '' });
+    setIsMintDialogOpen(false);
+
+    setTimeout(() => {
+      refetch();
+    }, 3000);
+  };
+
   // When the connected account changes, refetch the user's cNFTs
   useEffect(() => {
     if (account?.address) {
       refetch();
     }
   }, [account?.address, refetch]);
+
+  // Helper to attempt connecting Phantom extension directly (fallback for deployed sites)
+  const connectPhantomExtension = async () => {
+    try {
+      const w = (window as any).solana;
+      if (w && w.isPhantom && typeof w.connect === 'function') {
+        await w.connect();
+      } else {
+        // If Phantom not present, open download page
+        window.open('https://phantom.app/', '_blank');
+      }
+    } catch (err) {
+      console.error('Phantom connect error:', err);
+    }
+  };
+
+  // Debug mode: show wallet list and account state when ?debug=1 is present in the URL
+  let debugMode = false;
+  try {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      debugMode = params.get('debug') === '1';
+    }
+  } catch (e) {
+    /* ignore */
+  }
 
   if (!account) {
     return (
@@ -178,33 +224,49 @@ export function SelectNFTStep() {
                     Direct link to an image (PNG, JPG, GIF, etc.)
                   </p>
                 </div>
-                <Button
-                  onClick={handleMintCNFT}
-                  disabled={!mintForm.name || !mintForm.symbol || mintCNFT.isPending || (!!process.env.NEXT_PUBLIC_MERKLE_TREE_ADDRESS && !walletAdapter.publicKey)}
-                  className="w-full"
-                >
-                  {mintCNFT.isPending ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Minting...
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Mint cNFT
-                    </>
-                  )}
-                </Button>
+                <div className="space-y-2">
+                  <Button
+                    onClick={handleMintCNFT}
+                    disabled={!mintForm.name || !mintForm.symbol || mintCNFT.isPending || (!!process.env.NEXT_PUBLIC_MERKLE_TREE_ADDRESS && !account?.address)}
+                    className="w-full"
+                  >
+                    {mintCNFT.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Minting...
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Mint cNFT
+                      </>
+                    )}
+                  </Button>
+
+                  {/* Server-side Helius mint fallback (no signing) */}
+                  <Button
+                    onClick={handleServerMint}
+                    variant="outline"
+                    disabled={!mintForm.name || !mintForm.symbol || mintCNFT.isPending}
+                    className="w-full"
+                  >
+                    Use Server Mint (no signing)
+                  </Button>
+                </div>
+                
                 <p className="text-xs text-muted-foreground text-center">
                   This will create a compressed NFT on Solana Devnet using Helius API
                 </p>
-                {process.env.NEXT_PUBLIC_MERKLE_TREE_ADDRESS && !walletAdapter.publicKey && (
+                {process.env.NEXT_PUBLIC_MERKLE_TREE_ADDRESS && !account?.address && (
                   <div className="text-center mt-2">
                     <p className="text-xs text-destructive">
                       A signing wallet is required to mint when using the configured Merkle tree.
                     </p>
                     <div className="mt-2 flex items-center justify-center gap-2">
-                      <WalletMultiButton />
+                      <WalletDropdown />
+                      <Button variant="ghost" size="sm" onClick={connectPhantomExtension}>
+                        Connect Phantom (extension)
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -215,6 +277,14 @@ export function SelectNFTStep() {
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
+          {debugMode ? (
+            <div className="ml-4 text-left text-xs">
+              <div>Debug: connected={String(connected)}</div>
+              <div>active wallet: {wallet?.name || 'none'}</div>
+              <div>account: {account?.address || 'none'}</div>
+              <div>available wallets: {wallets.map((w) => w.name).join(', ')}</div>
+            </div>
+          ) : null}
         </div>
       </div>
     );
@@ -319,7 +389,7 @@ export function SelectNFTStep() {
                 </div>
                 <Button
                   onClick={handleMintCNFT}
-                  disabled={!mintForm.name || !mintForm.symbol || mintCNFT.isPending || (!!process.env.NEXT_PUBLIC_MERKLE_TREE_ADDRESS && !walletAdapter.publicKey)}
+                  disabled={!mintForm.name || !mintForm.symbol || mintCNFT.isPending || (!!process.env.NEXT_PUBLIC_MERKLE_TREE_ADDRESS && !account?.address)}
                   className="w-full"
                 >
                   {mintCNFT.isPending ? (
@@ -337,7 +407,7 @@ export function SelectNFTStep() {
                 <p className="text-xs text-muted-foreground text-center">
                   This will create a compressed NFT on Solana Devnet using Helius API
                 </p>
-                {process.env.NEXT_PUBLIC_MERKLE_TREE_ADDRESS && !walletAdapter.publicKey && (
+                {process.env.NEXT_PUBLIC_MERKLE_TREE_ADDRESS && !account?.address && (
                   <p className="text-xs text-destructive text-center mt-2">
                     A signing wallet is required to mint when using the configured Merkle tree. Please connect a wallet that supports transaction signing.
                   </p>
