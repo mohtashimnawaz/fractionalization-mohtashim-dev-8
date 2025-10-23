@@ -31,6 +31,15 @@ interface MintCNFTParams {
   forceHelius?: boolean;
 }
 
+// Minimal type for injected Phantom provider
+type PhantomProvider = {
+  publicKey?: { toString: () => string };
+  isPhantom?: boolean;
+  signTransaction?: (tx: Transaction) => Promise<Transaction>;
+  signAllTransactions?: (txs: Transaction[]) => Promise<Transaction[]>;
+  connect?: () => Promise<unknown>;
+};
+
 /**
  * Upload metadata to decentralized storage
  * 
@@ -184,12 +193,12 @@ export const useMintCNFT = () => {
         let effectiveAdapter = walletAdapter;
 
         if (!walletAdapter.publicKey) {
-          const maybeWindow = typeof window !== 'undefined' ? (window as unknown as { solana?: any }) : undefined;
+          const maybeWindow = typeof window !== 'undefined' ? (window as unknown as { solana?: PhantomProvider }) : undefined;
           const sol = maybeWindow?.solana;
           if (sol && sol.isPhantom) {
             console.log('Found Phantom extension - synthesizing adapter for UMI signing');
             const phantomAdapter = {
-              publicKey: new PublicKey(sol.publicKey.toString()),
+              publicKey: new PublicKey(sol.publicKey!.toString()),
               signTransaction: async (tx: Transaction) => {
                 // Ensure transaction has recentBlockhash and feePayer set before signing
                 try {
@@ -197,12 +206,16 @@ export const useMintCNFT = () => {
                     const latest = await connection.getLatestBlockhash();
                     tx.recentBlockhash = latest.blockhash;
                   }
-                  if (!tx.feePayer) {
+                  if (!tx.feePayer && sol.publicKey) {
                     tx.feePayer = new PublicKey(sol.publicKey.toString());
                   }
                 } catch (e) {
                   // If connection fails, continue and let Phantom handle or error
                   console.warn('Failed to populate recentBlockhash/feePayer before signing:', e);
+                }
+
+                if (!sol.signTransaction) {
+                  throw new Error('Phantom provider does not expose signTransaction');
                 }
 
                 const signed = await sol.signTransaction(tx);
@@ -216,7 +229,7 @@ export const useMintCNFT = () => {
                       const latest = await connection.getLatestBlockhash();
                       tx.recentBlockhash = latest.blockhash;
                     }
-                    if (!tx.feePayer) {
+                    if (!tx.feePayer && sol.publicKey) {
                       tx.feePayer = new PublicKey(sol.publicKey.toString());
                     }
                   }
@@ -229,6 +242,10 @@ export const useMintCNFT = () => {
                 }
 
                 // Fallback: sign each transaction individually
+                if (!sol.signTransaction) {
+                  throw new Error('Phantom provider does not expose signTransaction');
+                }
+
                 const signed: Transaction[] = [];
                 for (const tx of txs) {
                   signed.push((await sol.signTransaction(tx)) as Transaction);
