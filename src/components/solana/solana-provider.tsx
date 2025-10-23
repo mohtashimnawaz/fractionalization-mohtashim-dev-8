@@ -1,3 +1,5 @@
+"use client"
+
 import { ReactNode } from 'react'
 import { createSolanaDevnet, createSolanaLocalnet, createWalletUiConfig, WalletUi } from '@wallet-ui/react'
 import { WalletUiGillProvider } from '@wallet-ui/react-gill'

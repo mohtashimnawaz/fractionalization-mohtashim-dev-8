@@ -9,7 +9,6 @@ import { useState, useEffect } from 'react';
 import { useUserCNFTs, useMintCNFT } from '@/hooks';
 import { useWallet } from '@/components/solana/solana-provider';
 import { WalletDropdown } from '@/components/wallet-dropdown';
-import { useWallet as useWalletAdapter } from '@solana/wallet-adapter-react';
 import { useFractionalizationStore } from '@/stores';
 import { FractionalizationStep } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -26,7 +25,6 @@ export function SelectNFTStep() {
   const { data: nfts, isLoading, error, refetch } = useUserCNFTs(account?.address);
   const { formData, updateFormData, setStep } = useFractionalizationStore();
   const mintCNFT = useMintCNFT();
-  const walletAdapter = useWalletAdapter();
   
   
   const [isMintDialogOpen, setIsMintDialogOpen] = useState(false);
@@ -94,10 +92,12 @@ export function SelectNFTStep() {
   // Helper to attempt connecting Phantom extension directly (fallback for deployed sites)
   const connectPhantomExtension = async () => {
     try {
-      const w = (window as any).solana;
+      type PhantomProvider = { isPhantom?: boolean; connect?: () => Promise<unknown> };
+      const maybeWindow = typeof window !== 'undefined' ? (window as unknown as { solana?: PhantomProvider }) : undefined;
+      const w = maybeWindow?.solana;
       if (w && w.isPhantom && typeof w.connect === 'function') {
         await w.connect();
-      } else {
+      } else if (typeof window !== 'undefined') {
         // If Phantom not present, open download page
         window.open('https://phantom.app/', '_blank');
       }
