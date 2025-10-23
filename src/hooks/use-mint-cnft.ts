@@ -179,6 +179,14 @@ export const useMintCNFT = () => {
       if (useExistingTree) {
         // Mode 1: Use existing tree with user wallet signing
         if (!walletAdapter.publicKey) {
+          // If the app-level WalletUi reports a connected account, but there is no
+          // wallet-adapter present (typical on some deployed environments), fall
+          // back to using the Helius server mint to avoid a hard failure.
+          if (account?.address) {
+            console.warn('Wallet adapter missing; falling back to Helius server mint for connected WalletUi account');
+            return await mintWithHeliusAPI(params, account.address);
+          }
+
           throw new Error(
             'Wallet not connected. To mint with the configured Merkle tree you must connect a signing wallet. Alternatively, unset NEXT_PUBLIC_MERKLE_TREE_ADDRESS to use the Helius API fallback.'
           );
