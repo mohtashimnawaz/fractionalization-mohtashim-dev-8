@@ -42,9 +42,10 @@ export async function POST(req: NextRequest) {
 		}
 
 		return new Response(JSON.stringify({ signature: data.result.signature, assetId: data.result.assetId }), { status: 200, headers: { 'content-type': 'application/json' } });
-	} catch (err: any) {
-		console.error('API /api/mint-cnft error:', err);
-		return new Response(JSON.stringify({ error: err.message || String(err) }), { status: 500, headers: { 'content-type': 'application/json' } });
+	} catch (err: unknown) {
+		const message = err instanceof Error ? err.message : String(err);
+		console.error('API /api/mint-cnft error:', message, { raw: err });
+		return new Response(JSON.stringify({ error: message }), { status: 500, headers: { 'content-type': 'application/json' } });
 	}
 }
 

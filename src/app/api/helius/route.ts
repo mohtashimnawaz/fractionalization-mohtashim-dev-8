@@ -22,9 +22,10 @@ export async function POST(req: NextRequest) {
 		const contentType = resp.headers.get('content-type') || 'application/json';
 
 		return new Response(text, { status: resp.status, headers: { 'content-type': contentType } });
-	} catch (err: any) {
-		console.error('/api/helius error:', err);
-		return new Response(JSON.stringify({ error: err.message || String(err) }), { status: 500, headers: { 'content-type': 'application/json' } });
+	} catch (err: unknown) {
+		const message = err instanceof Error ? err.message : String(err);
+		console.error('/api/helius error:', message, { raw: err });
+		return new Response(JSON.stringify({ error: message }), { status: 500, headers: { 'content-type': 'application/json' } });
 	}
 }
 
@@ -40,8 +41,9 @@ export async function GET(req: Request) {
 		const { getAssetsByOwner } = await import('@/lib/helius');
 		const assets = await getAssetsByOwner(owner);
 		return new Response(JSON.stringify({ assets }), { status: 200, headers: { 'content-type': 'application/json' } });
-	} catch (err: any) {
-		console.error('/api/helius GET error:', err);
-		return new Response(JSON.stringify({ error: err.message || String(err) }), { status: 500, headers: { 'content-type': 'application/json' } });
+	} catch (err: unknown) {
+		const message = err instanceof Error ? err.message : String(err);
+		console.error('/api/helius GET error:', message, { raw: err });
+		return new Response(JSON.stringify({ error: message }), { status: 500, headers: { 'content-type': 'application/json' } });
 	}
 }
