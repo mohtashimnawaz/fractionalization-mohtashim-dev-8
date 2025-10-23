@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { useWallet } from '@/components/solana/solana-provider';
 import { useWallet as useWalletAdapter, useConnection } from '@solana/wallet-adapter-react';
 import { Connection } from '@solana/web3.js';
+import { PublicKey, Transaction } from '@solana/web3.js';
 import type { WalletContextState } from '@solana/wallet-adapter-react';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { mintV1, mplBubblegum } from '@metaplex-foundation/mpl-bubblegum';
@@ -178,26 +179,83 @@ export const useMintCNFT = () => {
 
       if (useExistingTree) {
         // Mode 1: Use existing tree with user wallet signing
+        // If walletAdapter isn't populated but the Phantom extension is present,
+        // synthesize a minimal adapter that forwards signTransaction to Phantom.
+        let effectiveAdapter = walletAdapter;
+
         if (!walletAdapter.publicKey) {
-          // If the app-level WalletUi reports a connected account, but there is no
-          // wallet-adapter present (typical on some deployed environments), fall
-          // back to using the Helius server mint to avoid a hard failure.
-          if (account?.address) {
+          const maybeWindow = typeof window !== 'undefined' ? (window as unknown as { solana?: any }) : undefined;
+          const sol = maybeWindow?.solana;
+          if (sol && sol.isPhantom) {
+            console.log('Found Phantom extension - synthesizing adapter for UMI signing');
+            const phantomAdapter = {
+              publicKey: new PublicKey(sol.publicKey.toString()),
+              signTransaction: async (tx: Transaction) => {
+                // Ensure transaction has recentBlockhash and feePayer set before signing
+                try {
+                  if (!tx.recentBlockhash) {
+                    const latest = await connection.getLatestBlockhash();
+                    tx.recentBlockhash = latest.blockhash;
+                  }
+                  if (!tx.feePayer) {
+                    tx.feePayer = new PublicKey(sol.publicKey.toString());
+                  }
+                } catch (e) {
+                  // If connection fails, continue and let Phantom handle or error
+                  console.warn('Failed to populate recentBlockhash/feePayer before signing:', e);
+                }
+
+                const signed = await sol.signTransaction(tx);
+                return signed as Transaction;
+              },
+              signAllTransactions: async (txs: Transaction[]) => {
+                try {
+                  // Populate recentBlockhash/feePayer for each tx if missing
+                  for (const tx of txs) {
+                    if (!tx.recentBlockhash) {
+                      const latest = await connection.getLatestBlockhash();
+                      tx.recentBlockhash = latest.blockhash;
+                    }
+                    if (!tx.feePayer) {
+                      tx.feePayer = new PublicKey(sol.publicKey.toString());
+                    }
+                  }
+                } catch (e) {
+                  console.warn('Failed to populate tx fields before bulk signing:', e);
+                }
+
+                if (typeof sol.signAllTransactions === 'function') {
+                  return (await sol.signAllTransactions(txs)) as Transaction[];
+                }
+
+                // Fallback: sign each transaction individually
+                const signed: Transaction[] = [];
+                for (const tx of txs) {
+                  signed.push((await sol.signTransaction(tx)) as Transaction);
+                }
+                return signed;
+              },
+            } as unknown as WalletContextState;
+
+            effectiveAdapter = phantomAdapter;
+          } else if (account?.address) {
+            // As a last resort, if WalletUi reports an account but no adapter,
+            // fall back to Helius server mint to avoid a hard failure.
             console.warn('Wallet adapter missing; falling back to Helius server mint for connected WalletUi account');
             return await mintWithHeliusAPI(params, account.address);
+          } else {
+            throw new Error(
+              'Wallet not connected. To mint with the configured Merkle tree you must connect a signing wallet. Alternatively, unset NEXT_PUBLIC_MERKLE_TREE_ADDRESS to use the Helius API fallback.'
+            );
           }
-
-          throw new Error(
-            'Wallet not connected. To mint with the configured Merkle tree you must connect a signing wallet. Alternatively, unset NEXT_PUBLIC_MERKLE_TREE_ADDRESS to use the Helius API fallback.'
-          );
         }
 
-        if (!walletAdapter.signTransaction) {
+        if (!effectiveAdapter.signTransaction) {
           throw new Error('Wallet does not support transaction signing');
         }
 
         console.log('🔐 Using existing tree - user will sign transaction');
-        return await mintWithExistingTree(params, connection, walletAdapter);
+        return await mintWithExistingTree(params, connection, effectiveAdapter);
       } else {
         // Mode 2: Use Helius API (fallback)
         if (!account?.address) {
